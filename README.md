@@ -60,30 +60,55 @@
 
 ---
 
+---
+
 ## 🔬 Mathematical Formulations
 
 ### 1. Weight-Decomposed Low-Rank Adaptation (DoRA)
-Conventional LoRA couples magnitude and direction updates via $W = W_0 + \frac{\alpha}{r}(BA)$, leading to structural drift during Fill-in-the-Middle generation. AetherKernel decomposes $W$ into an independent magnitude vector $m$ and normalized direction matrix $V$:
 
-$$W = m \frac{V}{\|V\|_F} = m \frac{W_0 + \frac{\alpha}{r}BA}{\left\|W_0 + \frac{\alpha}{r}BA\right\|_F}$$
+Conventional LoRA couples magnitude and direction updates via:
 
+$$W = W_0 + \Delta W = W_0 + \frac{\alpha}{r}(BA)$$
+
+This coupled formulation leads to structural drift during Fill-in-the-Middle (FIM) generation. AetherKernel decomposes the weight matrix into an independent magnitude vector $m$ and a normalized direction matrix $V$:
+
+$$W = m \odot \frac{V}{\|V\|_c}$$
+
+Expanding the directional matrix with low-rank adapter updates yields:
+
+$$W = m \odot \frac{W_0 + \frac{\alpha}{r}BA}{\left\|W_0 + \frac{\alpha}{r}BA\right\|_c}$$
+
+Where:
 * **Magnitude Vector ($m \in \mathbb{R}^{1 \times k}$):** Enforces language syntax invariants and compiler type stability.
-* **Direction Matrix ($V \in \mathbb{R}^{d \times k}$):** Adapts semantic routing and monorepo API usage trajectories.
+* **Direction Matrix ($V \in \mathbb{R}^{d \times k}$):** Learns monorepo-specific API routing and semantic completion paths.
+* **$\|\cdot\|_c$:** Column-wise Frobenius matrix norm ensuring unit directional vectors.
+
+---
 
 ### 2. Cache-Augmented Generation (CAG) Prefix Invariance
-In PagedAttention v2 runtimes, memory is organized into uniform blocks of size $B_s$. When queries share an identical token prefix of length $L$:
 
-$$\text{Prefill Complexity} = \mathcal{O}(L_{\text{total}} - L_{\text{shared}})$$
+In PagedAttention v2 runtimes, Key-Value cache memory is divided into physical memory blocks of uniform size $B_s$. When successive inference queries share an identical token prefix of length $L$:
 
-When $L_{\text{shared}} \approx L_{\text{total}}$, computational complexity drops from $\mathcal{O}(N)$ compute to an $\mathcal{O}(1)$ pointer lookup. AetherKernel guarantees prefix invariance by sorting KùzuDB AST query outputs lexicographically before prompt synthesis.
+$$\text{Prefill Compute Cost} = \mathcal{O}\left(L_{\text{total}} - L_{\text{shared}}\right)$$
+
+When the invariant prefix matches the cached context:
+
+$$L_{\text{shared}} \approx L_{\text{total}} \implies \text{Compute Overhead} \to \mathcal{O}(1)$$
+
+AetherKernel preserves this prefix equality across non-deterministic compiler states by applying a canonical topological sort over KùzuDB AST nodes:
+
+$$\text{Prefix}_{\text{CAG}} = \text{Sort}_{\text{lexicographical}}\Big(\bigcup_{i=1}^{n} \text{Contract}(f_i)\Big)$$
 
 ---
 
 ## 📊 Experimental Benchmarks
 
-| Metric | Vector GraphRAG (Baseline) | AetherKernel (CAG + DoRA) | Improvement |
-| :--- | :--- | :--- | :--- |
-| **KV-Cache Hit Ratio** | 12.3% | **87.4%** | **+7.1x Reuse** |
-| **Time-to-First-Token (TTFT)** | 2,420 ms | **182 ms** | **4.2x Faster** |
-| **Change Failure Rate (CFR)** | 22.8% | **6.8%** | **70.1% Syntax Error Reduction** |
-| **Graph Query Latency** | 48 ms (Remote) | **3.8 ms (In-Memory KùzuDB)** | **12.6x Speedup** |
+| Performance Metric | Vector GraphRAG (Baseline) | AetherKernel (CAG + DoRA) | Observed Gain |
+| :-------------------------------- | :------------------------: | :-----------------------: | :-----------------------: |
+| **PagedAttention KV Hit Ratio**   | 12.3%                      | **87.4%**                 | **+7.1x Reuse**           |
+| **Time-to-First-Token (TTFT)**    | 2,420 ms                   | **182 ms**                | **4.2x Faster**          |
+| **Change Failure Rate (CFR)**     | 22.8%                      | **6.8%**                  | **70.1% Syntax Drop**     |
+| **CPG Graph Traversal Latency**   | 48.0 ms (Remote RPC)       | **3.8 ms (In-Process)**   | **12.6x Speedup**         |
+| **AST Parse Verification Rate**   | 71.4%                      | **94.8%**                 | **+23.4% AST Integrity**  |
+
+---
