@@ -1,0 +1,16 @@
+﻿version: '3.8'
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: aether_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: aether_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin

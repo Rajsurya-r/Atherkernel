@@ -1,0 +1,10 @@
+﻿kuzu
+tree-sitter
+tree-sitter-python
+prometheus-client
+requests
+torch
+transformers
+peft
+datasets
+accelerate
