@@ -1,6 +1,6 @@
 ﻿"""
 AetherKernel: Multi-Agent Consensus & Ephemeral Compiler Sandbox
-Verifies syntactic validity inside an isolated AST sandbox and routes to HITL approval gates.
+Manages inference against local server, verifies AST validity, audits security, and routes HITL gates.
 """
 import ast
 import time
@@ -16,10 +16,7 @@ class AetherGatekeeper:
     def request_speculative_infill(
         self, cag_prefix: str, prefix_code: str, suffix_code: str
     ) -> Tuple[str, float]:
-        prompt = (
-            f"{cag_prefix}\n\n"
-            f"<fim_prefix>{prefix_code}<fim_suffix>{suffix_code}<fim_middle>"
-        )
+        prompt = f"{cag_prefix}\n\n<fim_prefix>{prefix_code}<fim_suffix>{suffix_code}<fim_middle>"
         payload = {
             "model": self.model_identifier,
             "prompt": prompt,
@@ -32,7 +29,7 @@ class AetherGatekeeper:
             response = requests.post(VLLM_COMPLETIONS_URL, json=payload, timeout=5)
             duration_ms = (time.perf_counter() - start_time) * 1000
             if response.status_code != 200:
-                raise RuntimeError(f"vLLM Serving Error: {response.text}")
+                raise RuntimeError(f"Server Error: {response.text}")
             infill_result = response.json()["choices"][0]["text"]
             return infill_result, duration_ms
         except Exception:
@@ -50,16 +47,30 @@ class AetherGatekeeper:
         except SyntaxError as err:
             return False, f"AST Syntax Violation: {str(err)}"
 
+    def verify_security_ast(self, code_str: str) -> Tuple[bool, str]:
+        """Module 4: Static AST Security Gatekeeper."""
+        try:
+            tree = ast.parse(code_str)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    if isinstance(node.func, ast.Name) and node.func.id in ["eval", "exec", "__import__"]:
+                        return False, f"Security Violation: Restricted builtin call '{node.func.id}()'"
+                    if isinstance(node.func, ast.Attribute) and node.func.attr in ["system", "popen", "spawn"]:
+                        return False, f"Security Violation: Unsafe OS process execution '{node.func.attr}()'"
+            return True, "AST Security Audit Clean"
+        except SyntaxError:
+            return False, "Syntax error prevents security evaluation"
+
     def execute_governance_pipeline(
         self, cag_prefix: str, prefix_code: str, suffix_code: str
     ) -> Dict[str, Any]:
-        infill, latency = self.request_speculative_infill(
-            cag_prefix, prefix_code, suffix_code
-        )
-        passed_compile, diagnostic_msg = self.verify_compilation_sandbox(
-            prefix_code, infill, suffix_code
-        )
-        confidence = 0.95 if passed_compile else 0.20
+        infill, latency = self.request_speculative_infill(cag_prefix, prefix_code, suffix_code)
+        reconstructed_code = f"{prefix_code}\n{infill}\n{suffix_code}"
+        
+        passed_compile, diagnostic_msg = self.verify_compilation_sandbox(prefix_code, infill, suffix_code)
+        passed_security, security_msg = self.verify_security_ast(reconstructed_code)
+
+        confidence = 0.95 if (passed_compile and passed_security) else 0.20
         if "TODO" in infill or "pass" in infill:
             confidence -= 0.15
         requires_hitl = confidence < 0.85
@@ -68,15 +79,8 @@ class AetherGatekeeper:
             "infill_code": infill,
             "latency_ms": latency,
             "sandbox_valid": passed_compile,
-            "diagnostic": diagnostic_msg,
+            "security_valid": passed_security,
+            "diagnostic": diagnostic_msg if not passed_compile else security_msg,
             "confidence_score": confidence,
             "requires_human_approval": requires_hitl
         }
-
-if __name__ == "__main__":
-    gate = AetherGatekeeper()
-    cag_context = "# Static Contract Header\nclass BaseHandler:\n    def execute(self): pass"
-    code_pre = "class HttpHandler(BaseHandler):\n    def execute(self):\n"
-    code_suf = "        return True\n"
-    res = gate.execute_governance_pipeline(cag_context, code_pre, code_suf)
-    print(f"Compilation Check: {res['sandbox_valid']} ({res['diagnostic']})")
