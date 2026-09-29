@@ -1,8 +1,11 @@
 ﻿__pycache__/
 *.pyc
-test_kuzu_db/
+.pytest_cache/
+test_kuzu*
 aether_kuzu_db/
-.venv/
-env/
 *.safetensors
 *.bin
+aether_dora_adapter/
+aether_dora_adapter.zip
+huggingface_cache/
+torch_cache/
