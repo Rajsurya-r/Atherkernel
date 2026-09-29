@@ -1,4 +1,6 @@
-﻿<div align="center">
+﻿[![AetherKernel CI](https://github.com/Rajsurya-r/Atherkernel/actions/workflows/ci.yml/badge.svg)](https://github.com/Rajsurya-r/Atherkernel/actions/workflows/ci.yml)
+
+<div align="center">
 
 # AetherKernel
 ### Speculative In-Memory Code Synthesis Runtime via Deterministic CAG & Weight-Decomposed LoRA
@@ -112,3 +114,29 @@ $$\text{Prefix}_{\text{CAG}} = \text{Sort}_{\text{lexicographical}}\Big(\bigcup_
 | **AST Parse Verification Rate**   | 71.4%                      | **94.8%**                 | **+23.4% AST Integrity**  |
 
 ---
+
+
+## System Architecture & Quickstart Guide
+
+AetherKernel orchestrates code generation through deterministic Code Property Graph (CPG) prefixing, specialized DoRA infill models, and AST-based security verification.
+
+### 1. Launch Speculative Inference Server
+```powershell
+python serve_model.py
+```
+* **Endpoint:** `http://127.0.0.1:8000`
+* **Adapter Status:** DoRA weights mounted
+* **Interactive Docs:** `http://127.0.0.1:8000/docs`
+
+### 2. Run Test Suite
+```powershell
+python -m pytest tests/ -v
+```
+Validates CPG graph query performance, deterministic lexicographical invariance, and AST security blocking.
+
+### 3. Run Benchmark Evaluation & Orchestrator
+```powershell
+python eval_benchmarks.py
+python run_exam_demo.py
+```
+Runs performance benchmarks and the end-to-end orchestration pipeline.
